@@ -21,7 +21,10 @@ int main(){
 			i++;
 			token = strtok(NULL, " ");
 		}
+
 		args[i] = NULL;
+
+		if(args[0] == NULL) continue; // empty line
 
 		if(strcmp(args[0], "exit") == 0) break;
 
