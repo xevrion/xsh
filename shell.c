@@ -10,6 +10,8 @@ int main(){
 	while(getline(&input, &len, stdin) != -1){
 		input[strcspn(input, "\n")] = '\0';
 		// system(input);
+		//
+		if(strcmp(input, "exit") == 0) break;
 
 		pid_t pid = fork();
 
