@@ -13,11 +13,21 @@ int main(){
 		//
 		if(strcmp(input, "exit") == 0) break;
 
+		// args handling
+		char *args[64];
+		char *token = strtok(input, " ");
+		int i =0;
+		while(token != NULL){
+			args[i] = token;
+			i++;
+			token = strtok(NULL, " ");
+		}
+		args[i] = NULL;
 		pid_t pid = fork();
 
 		if(pid==0){
 			// child
-			execlp(input, input, NULL);
+			execvp(args[0], args);
 		} else {
 			// parent
 			wait(NULL);
