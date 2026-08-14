@@ -7,7 +7,13 @@
 int main(){
 	char *input = NULL;
 	size_t len = 0;
-	while(getline(&input, &len, stdin) != -1){
+	while(1){
+		printf("xsh> ");
+		fflush(stdout);
+
+		if(getline(&input, &len, stdin) == -1) break;
+
+
 		input[strcspn(input, "\n")] = '\0';
 		// system(input);
 		//
