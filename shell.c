@@ -11,7 +11,6 @@ int main(){
 		input[strcspn(input, "\n")] = '\0';
 		// system(input);
 		//
-		if(strcmp(input, "exit") == 0) break;
 
 		// args handling
 		char *args[64];
@@ -23,6 +22,15 @@ int main(){
 			token = strtok(NULL, " ");
 		}
 		args[i] = NULL;
+
+		if(strcmp(args[0], "exit") == 0) break;
+
+		if(strcmp(args[0], "cd") == 0){
+			chdir(args[1]);
+			continue;
+		}
+
+
 		pid_t pid = fork();
 
 		if(pid==0){
