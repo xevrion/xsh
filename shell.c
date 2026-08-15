@@ -16,6 +16,51 @@ void parse(char *cmd, char *args[]) {
 	args[i] = NULL;
 }
 
+// trim spaces off both ends of a filename
+char *trim(char *s) {
+	while (*s == ' ') s++;
+
+	char *end = s + strlen(s);
+	while (end > s && end[-1] == ' ') end--;
+	*end = '\0';
+
+	return s;
+}
+
+// pull "> file" / ">> file" / "< file" off the end of cmd and hook up the fds.
+// runs in the child, so a bad open just kills that child.
+// returns -1 if a file could not be opened.
+int redirect(char *cmd) {
+	char *out = strchr(cmd, '>');
+	char *in = strchr(cmd, '<');
+
+	if (out != NULL) {
+		int append = (out[1] == '>'); // ">>" not ">"
+		char *file = out + (append ? 2 : 1);
+
+		*out = '\0'; // cut the redirection off the command
+		file = trim(file);
+
+		int flags = O_WRONLY | O_CREAT | (append ? O_APPEND : O_TRUNC);
+		int f = open(file, flags, 0644);
+		if (f == -1) { perror("open"); return -1; }
+		dup2(f, 1);
+		close(f);
+	}
+
+	if (in != NULL) {
+		*in = '\0';
+		char *file = trim(in + 1);
+
+		int f = open(file, O_RDONLY);
+		if (f == -1) { perror("open"); return -1; }
+		dup2(f, 0);
+		close(f);
+	}
+
+	return 0;
+}
+
 int main() {
 	char *input = NULL;
 	size_t len = 0;
@@ -30,103 +75,69 @@ int main() {
 		// system(input);
 		//
 
-		// redirection
-		if (strchr(input, '>') != NULL) {
-		    char *cmd  = strtok(input, ">");
-		    char *file = strtok(NULL, ">");
-
-
-		    while (*file == ' ') file++;
-
-		    char *args[64];
-		    parse(cmd, args);
-
-		    int f = open(file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-		    if (f == -1) { perror("open"); continue; }
-
-		    pid_t pid = fork();
-		    if (pid == 0) {
-		        dup2(f, 1);
-		        close(f);
-		        execvp(args[0], args);
-		        perror("exec");
-		        exit(1);
-		    }
-		    close(f);
-		    wait(NULL);
-		    continue;
-		}
-
-		if(strchr(input, '<') != NULL){
-			char *cmd = strtok(input, "<");
-			char *file = strtok(NULL, "<");
-
-			while (*file == ' ') file++;
-
-			char *args[64];
-			parse(cmd, args);
-
-			int f = open(file, O_RDONLY);
-			if (f == -1) { perror("open"); continue; }
-
-			pid_t pid = fork();
-			if (pid == 0) {
-				dup2(f, 0);
-				close(f);
-				execvp(args[0], args);
-				perror("exec");
-				exit(1);
-			}
-			close(f);
-			wait(NULL);
-			continue;
-		}
-
-		// pipe handling
+		// pipe handling (N-pipes)
 		if (strchr(input, '|') != NULL) {
-			char *cmd1 = strtok(input, "|");
-			char *cmd2 = strtok(NULL, "|");
+			char *cmds[64];
+			int n = 0;
 
-			char *args1[64], *args2[64];
-			parse(cmd1, args1);
-			parse(cmd2, args2);
-
-			int fd[2];
-			pipe(fd);
-
-			pid_t p1 = fork();
-			if (p1 == 0) {
-
-				dup2(fd[1], 1);
-				close(fd[0]);
-				close(fd[1]);
-				execvp(args1[0], args1);
-				perror("exec cmd1");
-				exit(1);
+			char *cmd = strtok(input, "|");
+			while (cmd != NULL) {
+				cmds[n++] = cmd;
+				cmd = strtok(NULL, "|");
 			}
 
-			pid_t p2 = fork();
-			if (p2 == 0) {
+			int in = 0; // read end of the previous pipe, stdin for the first cmd
 
-				dup2(fd[0], 0);
-				close(fd[1]);
-				close(fd[0]);
-				execvp(args2[0], args2);
-				perror("exec cmd2");
-				exit(1);
+			for (int j = 0; j < n; j++) {
+				int fd[2];
+				if (j < n - 1)
+					pipe(fd);
+
+				pid_t p = fork();
+				if (p == 0) {
+					if (in != 0) {
+						dup2(in, 0);
+						close(in);
+					}
+					if (j < n - 1) {
+						dup2(fd[1], 1);
+						close(fd[0]);
+						close(fd[1]);
+					}
+					// a stage's own < / > beats the pipe
+					if (redirect(cmds[j]) == -1)
+						exit(1);
+
+					char *args[64];
+					parse(cmds[j], args);
+					execvp(args[0], args);
+					perror("exec");
+					exit(1);
+				}
+
+				if (in != 0)
+					close(in);
+				if (j < n - 1) {
+					close(fd[1]);
+					in = fd[0]; // next cmd reads from here
+				}
 			}
 
-			close(fd[0]);
-			close(fd[1]);
-			wait(NULL); // wait for child 1
-			wait(NULL); // wait for child 2
+			for (int j = 0; j < n; j++)
+				wait(NULL); // wait for every child
 
 			continue;
 		}
 
 		// args handling
+		// builtins get checked on a copy, since redirect() has to chop up
+		// the real input inside the child
+		char copy[1024];
+		strncpy(copy, input, sizeof(copy) - 1);
+		copy[sizeof(copy) - 1] = '\0';
+
 		char *args[64];
-		char *token = strtok(input, " ");
+		char *token = strtok(copy, " ");
 		int i = 0;
 		while (token != NULL) {
 			args[i] = token;
@@ -151,7 +162,13 @@ int main() {
 
 		if (pid == 0) {
 			// child
+			if (redirect(input) == -1)
+				exit(1);
+
+			parse(input, args);
 			execvp(args[0], args);
+			perror("exec");
+			exit(1);
 		} else {
 			// parent
 			wait(NULL);
