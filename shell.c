@@ -21,14 +21,42 @@ void err(char *msg) {
 	fputs(RESET, stderr);
 }
 
-void parse(char *cmd, char *args[]) {
+// built-in aliases. real shells read these from a config file; this is
+// a fixed table so `ls` colorizes without typing the flag every time.
+// --color=auto (not always) so ls itself checks isatty and stays quiet
+// when its stdout is a pipe or a file.
+char *aliases[][2] = {
+	{"ls", "--color=auto"},
+	{"grep", "--color=auto"},
+	{"diff", "--color=auto"},
+	{NULL, NULL}
+};
+
+// if args[0] has an alias, slide the args up and insert the flag at [1].
+// nargs is how many args are already there (not counting the NULL).
+void alias(char *args[], int nargs) {
+	for (int i = 0; aliases[i][0] != NULL; i++) {
+		if (strcmp(args[0], aliases[i][0]) != 0)
+			continue;
+
+		for (int j = nargs; j > 0; j--) // shift right, NULL included
+			args[j + 1] = args[j];
+
+		args[1] = aliases[i][1];
+		return;
+	}
+}
+
+// returns how many args were parsed
+int parse(char *cmd, char *args[]) {
 	int i = 0;
-	char *token = strtok(cmd, " ");
+	char *token = strtok(cmd, " \t");
 	while (token != NULL) {
 		args[i++] = token;
-		token = strtok(NULL, " ");
+		token = strtok(NULL, " \t");
 	}
 	args[i] = NULL;
+	return i;
 }
 
 // trim spaces off both ends of a filename
@@ -147,7 +175,11 @@ int main() {
 						exit(1);
 
 					char *args[64];
-					parse(cmds[j], args);
+					int nargs = parse(cmds[j], args);
+					if (nargs == 0)
+						exit(1); // empty stage, e.g. "ls |"
+					alias(args, nargs);
+
 					execvp(args[0], args);
 					err("exec");
 					exit(1);
@@ -174,15 +206,7 @@ int main() {
 		copy[sizeof(copy) - 1] = '\0';
 
 		char *args[64];
-		char *token = strtok(copy, " ");
-		int i = 0;
-		while (token != NULL) {
-			args[i] = token;
-			i++;
-			token = strtok(NULL, " ");
-		}
-
-		args[i] = NULL;
+		parse(copy, args);
 
 		if (args[0] == NULL)
 			continue; // empty line
@@ -211,7 +235,9 @@ int main() {
 			if (redirect(input) == -1)
 				exit(1);
 
-			parse(input, args);
+			int nargs = parse(input, args);
+			alias(args, nargs);
+
 			execvp(args[0], args);
 			err("exec");
 			exit(1);

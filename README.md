@@ -29,14 +29,16 @@ gcc -Wall -Wextra -g shell.c -o myshell
 * [x] Handle bare `cd` / `cd ~` (go to $HOME) and report cd errors
 
 * [x] Signal handling: Ctrl-C interrupts child, not the shell
+* [x] Split tokens on tabs too, not just spaces
+* [x] Alias table — `ls`/`grep`/`diff` get `--color=auto` automatically
 
 ### In progress
-* [ ] Colorize `ls` output (needs isatty — child's stdout must look like a terminal)
+* [ ] Split code into multiple files + Makefile
 
 ### Todo
 * [ ] Redirection is "first one wins": only one `>` and one `<` per stage, and quoting is ignored (`echo "a > b"` still redirects)
 * [ ] Swap `signal()` for `sigaction()` (signal's semantics vary across systems)
-* [ ] Split code into multiple files + Makefile
+* [ ] Read aliases from a config file instead of a hardcoded table
 * [ ] (stretch) Command history
 * [ ] (stretch) Tab completion
 * [ ] (stretch) Background jobs with `&`
@@ -51,5 +53,6 @@ gcc -Wall -Wextra -g shell.c -o myshell
 * ANSI colors are just bytes the terminal intercepts: `ESC [ 1;32 m` = bold green. Always emit RESET after, or the color bleeds into every later line.
 * `~` is expanded by the shell, not the kernel. `chdir("~")` looks for a directory literally named `~` and fails — you have to swap in $HOME yourself.
 * Ignoring a return value hides bugs: `chdir()` failed silently for ages. It only became visible once the prompt displayed the cwd.
-* Signals are inherited across fork, exactly like fds are. The shell sets `SIG_IGN` for SIGINT so Ctrl-C doesn't kill it — but then every child inherits that ignore and becomes uninterruptible, so each child must `SIG_DFL` right after fork. Same lesson as closing inherited pipe ends: fork copies state you didn't mean to copy.
+* Signals are inherited across fork, exactly like fds are. The shell sets `SIG_IGN` for SIGINT so Ctrl-C doesn't kill it; but then every child inherits that ignore and becomes uninterruptible, so each child must `SIG_DFL` right after fork. Same lesson as closing inherited pipe ends: fork copies state you didn't mean to copy.
 * Ctrl-C goes to the whole foreground process group, not one process. That's why the shell died alongside the child before this fix.
+* `ls --color=auto` colorizes only when stdout is a terminal — ls calls `isatty(1)` itself and stays quiet when piped. `--color=always` would force escape codes into the pipe and corrupt whatever reads it. Programs adapting their output to whether stdout is a tty is why `ls | cat` prints one file per line but bare `ls` prints columns.
