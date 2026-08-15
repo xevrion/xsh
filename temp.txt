@@ -1,3 +1,0 @@
-myshell
-shell.c
-temp.txt

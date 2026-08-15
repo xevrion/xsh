@@ -1,0 +1,10 @@
+# compiled binary
+myshell
+*.o
+
+# editor
+.zed/
+
+# scratch files from redirection tests
+out.txt
+temp.txt
