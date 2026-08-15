@@ -1,0 +1,45 @@
+# xsh
+
+A minimal Unix shell written from scratch in C. Built to learn OS
+fundamentals: processes, exec, file descriptors, pipes, and redirection.
+
+## Build
+
+gcc -Wall -Wextra -g shell.c -o myshell
+./myshell
+
+## Features
+
+### Done
+* [x] Read–eval loop with prompt (`xsh> `)
+* [x] Run external commands via fork + execvp + wait
+* [x] Argument parsing (split on spaces with strtok)
+* [x] Built-in: `exit`
+* [x] Built-in: `cd`
+* [x] Empty-line guard (no segfault on blank Enter)
+* [x] Clean exit on Ctrl-D (EOF)
+* [x] Single pipe (`ls | grep c`)
+* [x] Output redirection (`ls > out.txt`)
+* [x] Input redirection (`wc < in.txt`)
+
+### In progress
+* [ ] N-pipes / arbitrary pipeline (`a | b | c | d`)
+
+### Todo
+* [ ] Combine pipe + redirection (`ls | grep c > out.txt`)
+* [ ] Append redirection (`>>`)
+* [ ] Split tokens on tabs too, not just spaces
+* [ ] Handle bare `cd` (go to $HOME) and cd errors
+* [ ] Signal handling: Ctrl-C interrupts child, not the shell
+* [ ] Prompt shows current working directory (getcwd)
+* [ ] Handle `cd` with no arg / invalid path gracefully
+* [ ] Split code into multiple files + Makefile
+* [ ] (stretch) Command history
+* [ ] (stretch) Tab completion
+* [ ] (stretch) Background jobs with `&`
+
+## Notes / learnings
+* strtok is destructive; it mutates the string, so check the raw input (e.g. for `|` or `>`) BEFORE tokenizing.
+* dup2 doesn't care what's on the other end; pipe or file, it's all just file descriptors. "Everything is a file."
+* Built-ins like cd/exit can't be forked; a child can't change the parent's directory or kill the parent.
+* Unclosed pipe write-ends cause the reader to hang forever (no EOF).
