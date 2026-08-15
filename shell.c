@@ -4,7 +4,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include<fcntl.h>
-#include <wchar.h>
+#include <signal.h>
 
 // ANSI colors. \033 is ESC; the terminal eats "ESC[...m" instead of
 // printing it. RESET turns styling back off, else it bleeds onto
@@ -79,6 +79,12 @@ int redirect(char *cmd) {
 int main() {
 	char *input = NULL;
 	size_t len = 0;
+
+	// Ctrl-C at the prompt shouldn't kill the shell. children undo this
+	// with SIG_DFL after fork, else they'd inherit the ignore and become
+	// uninterruptible.
+	signal(SIGINT, SIG_IGN);
+
 	while (1) {
 		// rebuilt every loop, so it follows cd
 		char cwd[1024];
@@ -125,6 +131,8 @@ int main() {
 
 				pid_t p = fork();
 				if (p == 0) {
+					signal(SIGINT, SIG_DFL); // undo the shell's ignore
+
 					if (in != 0) {
 						dup2(in, 0);
 						close(in);
@@ -198,6 +206,8 @@ int main() {
 
 		if (pid == 0) {
 			// child
+			signal(SIGINT, SIG_DFL); // undo the shell's ignore
+
 			if (redirect(input) == -1)
 				exit(1);
 
