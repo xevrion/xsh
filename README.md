@@ -21,14 +21,14 @@ gcc -Wall -Wextra -g shell.c -o myshell
 * [x] Single pipe (`ls | grep c`)
 * [x] Output redirection (`ls > out.txt`)
 * [x] Input redirection (`wc < in.txt`)
+* [x] N-pipes / arbitrary pipeline (`a | b | c | d`)
+* [x] Combine pipe + redirection (`ls | grep c > out.txt`)
+* [x] Append redirection (`>>`)
 
 ### In progress
-* [ ] N-pipes / arbitrary pipeline (`a | b | c | d`)
+* [ ] Split tokens on tabs too, not just spaces
 
 ### Todo
-* [ ] Combine pipe + redirection (`ls | grep c > out.txt`)
-* [ ] Append redirection (`>>`)
-* [ ] Split tokens on tabs too, not just spaces
 * [ ] Handle bare `cd` (go to $HOME) and cd errors
 * [ ] Signal handling: Ctrl-C interrupts child, not the shell
 * [ ] Prompt shows current working directory (getcwd)
@@ -43,3 +43,5 @@ gcc -Wall -Wextra -g shell.c -o myshell
 * dup2 doesn't care what's on the other end; pipe or file, it's all just file descriptors. "Everything is a file."
 * Built-ins like cd/exit can't be forked; a child can't change the parent's directory or kill the parent.
 * Unclosed pipe write-ends cause the reader to hang forever (no EOF).
+* N-pipes is a sliding window: carry the previous pipe's read end in a variable (`in`, starting at 0 = stdin). Each stage reads from it and writes to the next new pipe. The parent must close its copy of both ends every iteration, or the pipeline hangs.
+* Order of checks matters. Splitting on `>` before `|` breaks `ls | grep c > out.txt`, because the whole pipeline gets handed to the first command as arguments. Branch on `|` first, then let each stage handle its own redirection.
