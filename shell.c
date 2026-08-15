@@ -3,6 +3,8 @@
 #include <string.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include<fcntl.h>
+#include <wchar.h>
 
 void parse(char *cmd, char *args[]) {
 	int i = 0;
@@ -27,6 +29,58 @@ int main() {
 		input[strcspn(input, "\n")] = '\0';
 		// system(input);
 		//
+
+		// redirection
+		if (strchr(input, '>') != NULL) {
+		    char *cmd  = strtok(input, ">");
+		    char *file = strtok(NULL, ">");
+
+
+		    while (*file == ' ') file++;
+
+		    char *args[64];
+		    parse(cmd, args);
+
+		    int f = open(file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+		    if (f == -1) { perror("open"); continue; }
+
+		    pid_t pid = fork();
+		    if (pid == 0) {
+		        dup2(f, 1);
+		        close(f);
+		        execvp(args[0], args);
+		        perror("exec");
+		        exit(1);
+		    }
+		    close(f);
+		    wait(NULL);
+		    continue;
+		}
+
+		if(strchr(input, '<') != NULL){
+			char *cmd = strtok(input, "<");
+			char *file = strtok(NULL, "<");
+
+			while (*file == ' ') file++;
+
+			char *args[64];
+			parse(cmd, args);
+
+			int f = open(file, O_RDONLY);
+			if (f == -1) { perror("open"); continue; }
+
+			pid_t pid = fork();
+			if (pid == 0) {
+				dup2(f, 0);
+				close(f);
+				execvp(args[0], args);
+				perror("exec");
+				exit(1);
+			}
+			close(f);
+			wait(NULL);
+			continue;
+		}
 
 		// pipe handling
 		if (strchr(input, '|') != NULL) {
