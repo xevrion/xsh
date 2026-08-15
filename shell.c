@@ -6,6 +6,21 @@
 #include<fcntl.h>
 #include <wchar.h>
 
+// ANSI colors. \033 is ESC; the terminal eats "ESC[...m" instead of
+// printing it. RESET turns styling back off, else it bleeds onto
+// everything printed after.
+#define GREEN "\033[1;32m"
+#define BLUE "\033[1;34m"
+#define RED "\033[1;31m"
+#define RESET "\033[0m"
+
+// perror, but red. colors go to stderr so they wrap the whole message.
+void err(char *msg) {
+	fputs(RED, stderr);
+	perror(msg);
+	fputs(RESET, stderr);
+}
+
 void parse(char *cmd, char *args[]) {
 	int i = 0;
 	char *token = strtok(cmd, " ");
@@ -43,7 +58,7 @@ int redirect(char *cmd) {
 
 		int flags = O_WRONLY | O_CREAT | (append ? O_APPEND : O_TRUNC);
 		int f = open(file, flags, 0644);
-		if (f == -1) { perror("open"); return -1; }
+		if (f == -1) { err("open"); return -1; }
 		dup2(f, 1);
 		close(f);
 	}
@@ -53,7 +68,7 @@ int redirect(char *cmd) {
 		char *file = trim(in + 1);
 
 		int f = open(file, O_RDONLY);
-		if (f == -1) { perror("open"); return -1; }
+		if (f == -1) { err("open"); return -1; }
 		dup2(f, 0);
 		close(f);
 	}
@@ -65,7 +80,22 @@ int main() {
 	char *input = NULL;
 	size_t len = 0;
 	while (1) {
-		printf("xsh> ");
+		// rebuilt every loop, so it follows cd
+		char cwd[1024];
+		if (getcwd(cwd, sizeof(cwd)) != NULL) {
+			char *home = getenv("HOME");
+			int n = home ? strlen(home) : 0;
+
+			// /home/me/Coding -> ~/Coding, but don't turn
+			// /home/melissa into ~lissa
+			if (n > 0 && strncmp(cwd, home, n) == 0 &&
+			    (cwd[n] == '/' || cwd[n] == '\0'))
+				printf(GREEN "xsh " BLUE "~%s" RESET "> ", cwd + n);
+			else
+				printf(GREEN "xsh " BLUE "%s" RESET "> ", cwd);
+		} else {
+			printf(GREEN "xsh" RESET "> "); // cwd gone (deleted?), fall back
+		}
 		fflush(stdout);
 
 		if (getline(&input, &len, stdin) == -1)
@@ -111,7 +141,7 @@ int main() {
 					char *args[64];
 					parse(cmds[j], args);
 					execvp(args[0], args);
-					perror("exec");
+					err("exec");
 					exit(1);
 				}
 
@@ -130,8 +160,7 @@ int main() {
 		}
 
 		// args handling
-		// builtins get checked on a copy, since redirect() has to chop up
-		// the real input inside the child
+		// builtins get checked on a copy, since redirect() has to chop up the real input inside the child
 		char copy[1024];
 		strncpy(copy, input, sizeof(copy) - 1);
 		copy[sizeof(copy) - 1] = '\0';
@@ -154,7 +183,14 @@ int main() {
 			break;
 
 		if (strcmp(args[0], "cd") == 0) {
-			chdir(args[1]);
+			// bare "cd" or "cd ~" both mean $HOME. the shell expands
+			// ~, not the kernel, so chdir("~") would just fail.
+			char *dir = args[1];
+			if (dir == NULL || strcmp(dir, "~") == 0)
+				dir = getenv("HOME");
+
+			if (dir == NULL || chdir(dir) == -1)
+				err("cd");
 			continue;
 		}
 
@@ -167,7 +203,7 @@ int main() {
 
 			parse(input, args);
 			execvp(args[0], args);
-			perror("exec");
+			err("exec");
 			exit(1);
 		} else {
 			// parent

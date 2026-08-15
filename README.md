@@ -24,15 +24,15 @@ gcc -Wall -Wextra -g shell.c -o myshell
 * [x] N-pipes / arbitrary pipeline (`a | b | c | d`)
 * [x] Combine pipe + redirection (`ls | grep c > out.txt`)
 * [x] Append redirection (`>>`)
+* [x] Prompt shows current working directory (getcwd), with `~` for $HOME
+* [x] Colored prompt + red errors (ANSI escape codes)
+* [x] Handle bare `cd` / `cd ~` (go to $HOME) and report cd errors
 
 ### In progress
-* [ ] Split tokens on tabs too, not just spaces
+* [ ] Signal handling: Ctrl-C interrupts child, not the shell
 
 ### Todo
-* [ ] Handle bare `cd` (go to $HOME) and cd errors
-* [ ] Signal handling: Ctrl-C interrupts child, not the shell
-* [ ] Prompt shows current working directory (getcwd)
-* [ ] Handle `cd` with no arg / invalid path gracefully
+* [ ] Colorize `ls` output (needs isatty — child's stdout must look like a terminal)
 * [ ] Split code into multiple files + Makefile
 * [ ] (stretch) Command history
 * [ ] (stretch) Tab completion
@@ -45,3 +45,6 @@ gcc -Wall -Wextra -g shell.c -o myshell
 * Unclosed pipe write-ends cause the reader to hang forever (no EOF).
 * N-pipes is a sliding window: carry the previous pipe's read end in a variable (`in`, starting at 0 = stdin). Each stage reads from it and writes to the next new pipe. The parent must close its copy of both ends every iteration, or the pipeline hangs.
 * Order of checks matters. Splitting on `>` before `|` breaks `ls | grep c > out.txt`, because the whole pipeline gets handed to the first command as arguments. Branch on `|` first, then let each stage handle its own redirection.
+* ANSI colors are just bytes the terminal intercepts: `ESC [ 1;32 m` = bold green. Always emit RESET after, or the color bleeds into every later line.
+* `~` is expanded by the shell, not the kernel. `chdir("~")` looks for a directory literally named `~` and fails — you have to swap in $HOME yourself.
+* Ignoring a return value hides bugs: `chdir()` failed silently for ages. It only became visible once the prompt displayed the cwd.
